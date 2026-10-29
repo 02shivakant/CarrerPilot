@@ -1,6 +1,6 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .model import Resume
+from .models import Resume
 from .serializers import ResumeSerializer
 
 class ResumeListCreateView(generics.ListCreateAPIView):

@@ -1,7 +1,7 @@
 from rest_framework import serializers
-from .model import Resume
+from .models import Resume
 
-class ResumeSerializer(serializers.ModelSerializers):
+class ResumeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Resume
         fields = [ 
