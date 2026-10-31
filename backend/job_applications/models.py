@@ -1,0 +1,55 @@
+
+from django.db import models
+from django.contrib.auth.models import User
+from jobs.models import Job
+
+
+class Application(models.Model):
+
+    STATUS_CHOICES = [
+        ('SAVED', 'Saved'),
+        ('APPLIED', 'Applied'),
+        ('SHORTLISTED', 'Shortlisted'),
+        ('INTERVIEW', 'Interview'),
+        ('REJECTED', 'Rejected'),
+        ('SELECTED', 'Selected'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='applications'
+    )
+
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name='applications'
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='SAVED'
+    )
+
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'job'],
+                name='unique_user_job_application'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.job.title}"

@@ -33,8 +33,9 @@ INSTALLED_APPS = [
     #carrerPilot apps 
     'jobs',
     'accounts',
-    'applications',
+    'job_applications',
     'resumes',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
