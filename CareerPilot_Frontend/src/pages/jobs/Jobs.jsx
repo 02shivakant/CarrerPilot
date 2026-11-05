@@ -12,6 +12,8 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  CheckCircle2,
+  Send,
 } from "lucide-react";
 
 import PageHeader from "../../components/common/PageHeader";
@@ -19,24 +21,44 @@ import api from "../../services/api";
 
 export default function Jobs() {
   const [jobs, setJobs] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [query, setQuery] = useState("");
   const [workType, setWorkType] = useState("ALL");
   const [location, setLocation] = useState("ALL");
   const [saved, setSaved] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  // Fetch jobs from Django
-  const fetchJobs = async () => {
+  const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Fetch jobs and existing applications
+  const fetchData = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await api.get("/jobs/");
+      const [jobsResponse, applicationsResponse] =
+        await Promise.all([
+          api.get("/jobs/"),
+          api.get("/applications/"),
+        ]);
 
-      const data = response.data;
-      setJobs(Array.isArray(data) ? data : data.results || []);
+      const jobsData = jobsResponse.data;
+      const applicationsData = applicationsResponse.data;
+
+      setJobs(
+        Array.isArray(jobsData)
+          ? jobsData
+          : jobsData.results || []
+      );
+
+      setApplications(
+        Array.isArray(applicationsData)
+          ? applicationsData
+          : applicationsData.results || []
+      );
     } catch (err) {
       console.error("Jobs fetch error:", err);
 
@@ -50,16 +72,14 @@ export default function Jobs() {
   };
 
   useEffect(() => {
-    fetchJobs();
+    fetchData();
   }, []);
 
   // Get unique locations
   const locations = useMemo(() => {
     return [
       ...new Set(
-        jobs
-          .map((job) => job.location)
-          .filter(Boolean)
+        jobs.map((job) => job.location).filter(Boolean)
       ),
     ];
   }, [jobs]);
@@ -67,14 +87,16 @@ export default function Jobs() {
   // Filter jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
+      const skills = Array.isArray(job.required_skills)
+        ? job.required_skills
+        : [job.required_skills || ""];
+
       const searchText = [
         job.title,
         job.company,
         job.location,
         job.description,
-        ...(Array.isArray(job.required_skills)
-          ? job.required_skills
-          : [job.required_skills || ""]),
+        ...skills,
       ]
         .join(" ")
         .toLowerCase();
@@ -95,6 +117,15 @@ export default function Jobs() {
     });
   }, [jobs, query, workType, location]);
 
+  // Check whether the user already applied
+  const hasApplied = (jobId) => {
+    return applications.some(
+      (application) =>
+        Number(application.job) === Number(jobId) &&
+        application.status !== "SAVED"
+    );
+  };
+
   // Bookmark job
   const toggleSave = (id) => {
     setSaved((previous) =>
@@ -102,6 +133,62 @@ export default function Jobs() {
         ? previous.filter((jobId) => jobId !== id)
         : [...previous, id]
     );
+  };
+
+  // Submit application
+  const applyForJob = async (job) => {
+    if (hasApplied(job.id)) {
+      setError("You have already applied for this job.");
+      return;
+    }
+
+    setApplying(job.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await api.post("/applications/", {
+        job: job.id,
+        status: "APPLIED",
+        applied_at: new Date().toISOString(),
+        notes: "",
+      });
+
+      setApplications((previous) => [
+        ...previous,
+        response.data,
+      ]);
+
+      setSuccess(
+        `Successfully applied for ${job.title} at ${job.company}!`
+      );
+    } catch (err) {
+      console.error("Application error:", err);
+
+      const message = err.response?.data;
+
+      setError(
+        message?.non_field_errors?.[0] ||
+        message?.job?.[0] ||
+        message?.detail ||
+        "Unable to submit your application. Please try again."
+      );
+
+      // Refresh applications in case the application
+      // was already submitted elsewhere.
+      try {
+        const response = await api.get("/applications/");
+        const data = response.data;
+
+        setApplications(
+          Array.isArray(data) ? data : data.results || []
+        );
+      } catch (refreshError) {
+        console.error("Application refresh error:", refreshError);
+      }
+    } finally {
+      setApplying(null);
+    }
   };
 
   // Format work type
@@ -112,7 +199,7 @@ export default function Jobs() {
       type.slice(1).toLowerCase();
   };
 
-  // Format posted date
+  // Format date
   const formatDate = (date) => {
     if (!date) return "Recently posted";
 
@@ -123,19 +210,19 @@ export default function Jobs() {
     });
   };
 
-  // Skills
+  // Get skills
   const getSkills = (skills) => {
     if (Array.isArray(skills)) return skills;
 
     if (typeof skills === "string") {
-      return skills.split(",").map((skill) => skill.trim()).filter(Boolean);
+      return skills.split(",").map((s) => s.trim()).filter(Boolean);
     }
 
     return [];
   };
 
-  // Open application URL
-  const applyForJob = (job) => {
+  // Open external application link
+  const openExternalApplication = (job) => {
     if (job.application_url) {
       window.open(
         job.application_url,
@@ -198,25 +285,50 @@ export default function Jobs() {
         </select>
       </div>
 
-      {/* Error */}
+      {/* Error message */}
       {error && (
         <div
           className="glass panel"
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 18,
+            gap: 10,
+            marginBottom: 15,
           }}
         >
-          <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
-            <AlertCircle size={18} color="#ef4444" />
-            <span style={{ fontSize: 12 }}>{error}</span>
-          </div>
+          <AlertCircle size={17} color="#ef4444" />
+          <span style={{ fontSize: 12 }}>{error}</span>
 
-          <button className="btn secondary" onClick={fetchJobs}>
-            <RefreshCw size={13} /> Retry
+          <button
+            className="icon-button"
+            style={{ marginLeft: "auto" }}
+            onClick={() => setError("")}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* Success message */}
+      {success && (
+        <div
+          className="glass panel"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 15,
+          }}
+        >
+          <CheckCircle2 size={18} color="#22c55e" />
+          <span style={{ fontSize: 12 }}>{success}</span>
+
+          <button
+            className="icon-button"
+            style={{ marginLeft: "auto" }}
+            onClick={() => setSuccess("")}
+          >
+            <X size={15} />
           </button>
         </div>
       )}
@@ -247,9 +359,11 @@ export default function Jobs() {
           >
             <div>
               <span className="pill green">Job details</span>
+
               <h2 style={{ fontSize: 19, marginTop: 13 }}>
                 {selectedJob.title}
               </h2>
+
               <p style={{ fontSize: 12, marginTop: 6 }}>
                 {selectedJob.company}
               </p>
@@ -258,7 +372,6 @@ export default function Jobs() {
             <button
               className="icon-button"
               onClick={() => setSelectedJob(null)}
-              aria-label="Close job details"
             >
               <X size={18} />
             </button>
@@ -299,7 +412,8 @@ export default function Jobs() {
                 whiteSpace: "pre-wrap",
               }}
             >
-              {selectedJob.description || "No description available."}
+              {selectedJob.description ||
+                "No description available."}
             </p>
           </div>
 
@@ -315,11 +429,13 @@ export default function Jobs() {
               }}
             >
               {getSkills(selectedJob.required_skills).length > 0 ? (
-                getSkills(selectedJob.required_skills).map((skill, i) => (
-                  <span className="pill green" key={`${skill}-${i}`}>
-                    {skill}
-                  </span>
-                ))
+                getSkills(selectedJob.required_skills).map(
+                  (skill, i) => (
+                    <span className="pill green" key={`${skill}-${i}`}>
+                      {skill}
+                    </span>
+                  )
+                )
               ) : (
                 <p style={{ fontSize: 11, color: "var(--muted)" }}>
                   No specific skills listed.
@@ -328,18 +444,44 @@ export default function Jobs() {
             </div>
           </div>
 
-          <div style={{ marginTop: 24 }}>
-            {selectedJob.application_url ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              marginTop: 24,
+            }}
+          >
+            <button
+              className="btn"
+              onClick={() => applyForJob(selectedJob)}
+              disabled={
+                applying === selectedJob.id ||
+                hasApplied(selectedJob.id)
+              }
+            >
+              {applying === selectedJob.id ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : hasApplied(selectedJob.id) ? (
+                <CheckCircle2 size={14} />
+              ) : (
+                <Send size={14} />
+              )}
+
+              {applying === selectedJob.id
+                ? "Applying..."
+                : hasApplied(selectedJob.id)
+                  ? "Already Applied"
+                  : "Apply Now"}
+            </button>
+
+            {selectedJob.application_url && (
               <button
-                className="btn"
-                onClick={() => applyForJob(selectedJob)}
+                className="btn secondary"
+                onClick={() => openExternalApplication(selectedJob)}
               >
-                Apply now <ExternalLink size={14} />
+                External link <ExternalLink size={13} />
               </button>
-            ) : (
-              <span className="pill">
-                No external application link
-              </span>
             )}
           </div>
         </div>
@@ -357,7 +499,9 @@ export default function Jobs() {
             </div>
 
             <span className="pill">
-              {saved.length} Saved
+              {applications.filter(
+                (app) => app.status !== "SAVED"
+              ).length} Applied
             </span>
           </div>
 
@@ -429,7 +573,10 @@ export default function Jobs() {
                   </span>
                 </div>
 
-                <div className="resume-meta">
+                <div
+                  className="resume-meta"
+                  style={{ flexWrap: "wrap", gap: 10 }}
+                >
                   <span>
                     <MapPin
                       size={11}
@@ -438,12 +585,37 @@ export default function Jobs() {
                     {job.location}
                   </span>
 
-                  <button
-                    className="btn secondary"
-                    onClick={() => setSelectedJob(job)}
-                  >
-                    View role <ArrowUpRight size={13} />
-                  </button>
+                  <div style={{ display: "flex", gap: 7 }}>
+                    <button
+                      className="btn secondary"
+                      onClick={() => setSelectedJob(job)}
+                    >
+                      View role <ArrowUpRight size={13} />
+                    </button>
+
+                    <button
+                      className="btn"
+                      onClick={() => applyForJob(job)}
+                      disabled={
+                        applying === job.id ||
+                        hasApplied(job.id)
+                      }
+                    >
+                      {applying === job.id ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : hasApplied(job.id) ? (
+                        <CheckCircle2 size={13} />
+                      ) : (
+                        <Send size={13} />
+                      )}
+
+                      {applying === job.id
+                        ? "Applying"
+                        : hasApplied(job.id)
+                          ? "Applied"
+                          : "Apply"}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -455,9 +627,11 @@ export default function Jobs() {
               style={{ textAlign: "center", padding: 35 }}
             >
               <BriefcaseBusiness size={30} />
+
               <h3 style={{ marginTop: 12 }}>
                 No matching opportunities
               </h3>
+
               <p style={{ fontSize: 11, marginTop: 7 }}>
                 Try changing your search or filters.
               </p>
