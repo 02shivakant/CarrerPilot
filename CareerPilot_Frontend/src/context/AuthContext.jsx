@@ -1,51 +1,91 @@
-import { createContext , useState , useEffect } from "react";
 
-export const AuthContext = createContext()
+import { createContext, useState, useEffect } from "react";
 
-export const AuthProvider = ({children})=>{
-    const [accessToken, setAccessToken] = useState(
-        localStorage.getItem('access_token')
-    );
+export const AuthContext = createContext();
 
-    const [refreshToken, setrefreshToken] = useState(
-        localStorage.getItem('refresh_token')
-    );
+export const AuthProvider = ({ children }) => {
+  const [accessToken, setAccessToken] = useState(
+    localStorage.getItem("access_token")
+  );
 
-    const [user , setUser] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(
+    localStorage.getItem("refresh_token")
+  );
 
-    const isAuthenticated = Boolean(accessToken);
+  const [user, setUser] = useState(null);
 
-    const login = (access , refresh) =>{
-        localStorage.setItem('access_token' , access);
-        localStorage.setItem('refresh_token' , refresh);
+  const isAuthenticated = Boolean(accessToken);
 
-        setAccessToken(access);
-        setrefreshToken(refresh);
+  const login = (access, refresh) => {
+    localStorage.setItem("access_token", access);
+    localStorage.setItem("refresh_token", refresh);
 
+    setAccessToken(access);
+    setRefreshToken(refresh);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+
+    setAccessToken(null);
+    setRefreshToken(null);
+    setUser(null);
+  };
+
+  useEffect(() => {
+    const handleTokenRefresh = (event) => {
+      const { access, refresh } = event.detail;
+
+      setAccessToken(access);
+
+      if (refresh) {
+        setRefreshToken(refresh);
+      }
     };
 
-     const logout = () =>{
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-
-        setAccessToken(null);
-        setrefreshToken(null);
-        setUser(null);
+    const handleLogout = () => {
+      setAccessToken(null);
+      setRefreshToken(null);
+      setUser(null);
     };
 
-    const value = {
-        user,
-        setUser,
-        accessToken,
-        refreshToken,
-        isAuthenticated,
-        login,
-        logout,
+    window.addEventListener(
+      "auth:token-refreshed",
+      handleTokenRefresh
+    );
+
+    window.addEventListener(
+      "auth:logout",
+      handleLogout
+    );
+
+    return () => {
+      window.removeEventListener(
+        "auth:token-refreshed",
+        handleTokenRefresh
+      );
+
+      window.removeEventListener(
+        "auth:logout",
+        handleLogout
+      );
+    };
+  }, []);
+
+  const value = {
+    user,
+    setUser,
+    accessToken,
+    refreshToken,
+    isAuthenticated,
+    login,
+    logout,
   };
 
   return (
     <AuthContext.Provider value={value}>
-        {children}
+      {children}
     </AuthContext.Provider>
-  )
+  );
 };
