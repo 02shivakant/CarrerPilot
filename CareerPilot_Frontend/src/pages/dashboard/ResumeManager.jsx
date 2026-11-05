@@ -67,10 +67,10 @@ export default function ResumeManager() {
         formData.append("file", file);
 
         await api.post("/resumes/", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
+            headers: {
+              "Content-Type": undefined,
+            },
+          });
       }
 
       setSuccess(
@@ -81,11 +81,13 @@ export default function ResumeManager() {
 
       await fetchResumes();
     } catch (err) {
+      console.error("Resume upload error:", err);
+      console.error("Backend response:", err.response?.data);
+
       setError(
-        err.response?.data?.detail ||
-        err.response?.data?.file?.[0] ||
-        err.response?.data?.non_field_errors?.[0] ||
-        "Resume upload failed. Please try again."
+        JSON.stringify(
+          err.response?.data || err.message
+        )
       );
     } finally {
       setUploading(false);

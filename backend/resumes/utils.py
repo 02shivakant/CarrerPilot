@@ -4,7 +4,7 @@ from docx import Document
 def extract_resume_text(file_path):
     file_path = str(file_path)
 
-    if file_path.lower().endwith(".pdf"):
+    if file_path.lower().endswith(".pdf"):
         text = []
 
         with fitz.open(file_path) as pdf:
