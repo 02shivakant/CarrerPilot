@@ -14,14 +14,14 @@ SECRET_KEY = os.getenv(
     "django-insecure-local-development-only",
 )
 
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv(
      "ALLOWED_HOSTS",
     "localhost,127.0.0.1"
 ).split(",")
 
-
+print("DEPLOYED ALLOWED_HOSTS:", ALLOWED_HOSTS)
 # Application definition
 
 INSTALLED_APPS = [
